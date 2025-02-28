@@ -1,57 +1,75 @@
+import { Hono } from 'hono';
+import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
+
 import { APP_BASE_HREF } from '@angular/common';
 import { CommonEngine } from '@angular/ssr';
-import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import bootstrap from './src/main.server';
 
-// The Express app is exported so that it can be used by serverless Functions.
-export function app(): express.Express {
-  const server = express();
+export function app(): Hono {
+  const app = new Hono();
   const serverDistFolder = dirname(fileURLToPath(import.meta.url));
   const browserDistFolder = resolve(serverDistFolder, '../browser');
   const indexHtml = join(serverDistFolder, 'index.server.html');
 
   const commonEngine = new CommonEngine();
 
-  server.set('view engine', 'html');
-  server.set('views', browserDistFolder);
+  // json を返す hello API
+  app.get('/hello', (c) =>
+    c.json({
+      hello: 'world!',
+    })
+  );
 
-  // Example Express Rest API endpoints
-  // server.get('/api/**', (req, res) => { });
-  // Serve static files from /browser
-  server.get('**', express.static(browserDistFolder, {
-    maxAge: '1y',
-    index: 'index.html',
-  }));
-
-  // All regular routes use the Angular engine
-  server.get('**', (req, res, next) => {
-    const { protocol, originalUrl, baseUrl, headers } = req;
-
-    commonEngine
-      .render({
+  // SSRするパスを指定
+  app.get('/', async (c) => {
+    const url = c.req.url;
+    try {
+      const html = await commonEngine.render({
         bootstrap,
         documentFilePath: indexHtml,
-        url: `${protocol}://${headers.host}${originalUrl}`,
+        url: `${url}`,
         publicPath: browserDistFolder,
-        providers: [{ provide: APP_BASE_HREF, useValue: baseUrl }],
-      })
-      .then((html) => res.send(html))
-      .catch((err) => next(err));
+        providers: [{ provide: APP_BASE_HREF, useValue: '' }],
+      });
+      return c.html(html);
+    } catch (err) {
+      console.error('Error:', err);
+      // エラー時にもレスポンスを返す
+      return c.html(
+        `<html><body><h1>Server Error</h1><p>${err}</p></body></html>`,
+        500
+      );
+    }
   });
 
-  return server;
+  // 静的ファイルのパスを指定
+  app.use(
+    '/*',
+    serveStatic({
+      root: './dist/angular-hono-starter/browser',
+      index: 'index.html',
+      onNotFound: (path, c) => {
+        console.log(`${path} is not found, request to ${c.req.path}`);
+      },
+    })
+  );
+
+  return app;
 }
 
 function run(): void {
-  const port = process.env['PORT'] || 4000;
-
-  // Start up the Node server
   const server = app();
-  server.listen(port, () => {
-    console.log(`Node Express server listening on http://localhost:${port}`);
+  const port = +process.env['PORT']! || 4001;
+
+  serve({
+    fetch: server.fetch,
+    port: port,
   });
+
+  console.log(`Server is running on http://localhost:${port}`);
 }
 
 run();

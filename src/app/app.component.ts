@@ -1,13 +1,20 @@
-import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Component, inject, OnInit } from '@angular/core';
+import { JsonPipe } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet],
-  templateUrl: './app.component.html',
-  styleUrl: './app.component.css'
+  imports: [JsonPipe],
+  template: ` <div>message: {{ res | json }}</div> `,
 })
-export class AppComponent {
-  title = 'angular-hono-starter';
+export class AppComponent implements OnInit {
+  res: any;
+  #http = inject(HttpClient);
+
+  ngOnInit() {
+    this.#http.get<any>('http://localhost:4001/hello').subscribe((data) => {
+      this.res = data;
+    });
+  }
 }
