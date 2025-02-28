@@ -1,4 +1,4 @@
-# AngularHonoStarter
+# Angular-Hono-Starter
 
 ## プロジェクト概要
 
